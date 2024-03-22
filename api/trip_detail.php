@@ -1,16 +1,12 @@
 <?php
+require_once '../db_config.php';
+
 header('Access-Control-Allow-Origin: *'); // or set to allowed domain
 header('Content-Type: application/json; charset=utf-8');
 
-// Database configuration
-$database_hostname = 'teamproject.ddns.net';
-$database_username = 'team'; 
-$database_password = 'Te@m1234!';
-$database_databasename = 'management';
-
 try {
-    // Create a PDO connection
-    $pdo = new PDO("mysql:host=$database_hostname;dbname=$database_databasename", $database_username, $database_password);
+    // Create a PDO connection using database configuration constants
+    $pdo = new PDO("mysql:host=" . DB_HOSTNAME . ";dbname=" . DB_DATABASE, DB_USERNAME, DB_PASSWORD);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
     // Handle preflight OPTIONS request
