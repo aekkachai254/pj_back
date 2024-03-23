@@ -1,5 +1,5 @@
 <?php
-require_once '../db_config.php';
+require_once './db_config.php';
 
 // Initialize and handle CORS headers
 $corsHandler = new CorsHandler();

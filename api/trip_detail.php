@@ -1,5 +1,5 @@
 <?php
-require_once '../db_config.php';
+require_once './db_config.php';
 
 header('Access-Control-Allow-Origin: *'); // or set to allowed domain
 header('Content-Type: application/json; charset=utf-8');
