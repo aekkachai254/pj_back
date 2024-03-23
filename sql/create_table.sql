@@ -273,7 +273,7 @@ CREATE TABLE `ms_student_jeck` (
   `birthdate` date NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `card_id` (`card_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 
 -- management.ms_subject definition
@@ -285,7 +285,7 @@ CREATE TABLE `ms_subject` (
   `subject_class` int(11) NOT NULL,
   `subject_term` int(11) NOT NULL,
   PRIMARY KEY (`subject_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='ข้อมูลนักเรียน';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='ข้อมูลนักเรียน';
 
 
 -- management.ms_system definition
@@ -564,7 +564,7 @@ CREATE TABLE `grade_student` (
   PRIMARY KEY (`id`),
   KEY `student_id` (`student_id`) USING BTREE,
   CONSTRAINT `ID_Student` FOREIGN KEY (`student_id`) REFERENCES `ms_student_jeck` (`card_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 
 -- management.subject_grade definition
@@ -579,4 +579,4 @@ CREATE TABLE `subject_grade` (
   KEY `Student_ID` (`student_id`),
   CONSTRAINT `Student_ID` FOREIGN KEY (`student_id`) REFERENCES `ms_student_jeck` (`card_id`),
   CONSTRAINT `Subject_ID` FOREIGN KEY (`subject_id`) REFERENCES `ms_subject` (`subject_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

@@ -79,6 +79,7 @@ function fetchDriverData($pdo, $driverId) {
             'firstname' => $row_personal['firstname'],
             'surname' => $row_personal['surname'],
             'telephone' => $row_personal['telephone'],
+            'picture' => $row_personal['picture'],
         ];
     }
     return $driverData;
