@@ -1,120 +1,111 @@
 <?php
-// ตรวจสอบว่า request เป็นแบบ OPTIONS หรือไม่ (สำหรับการทำ CORS preflight)
-if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
-    // ตั้งค่า header สำหรับการทำ CORS preflight
-    header('Access-Control-Allow-Origin: *'); // หรือตั้งค่าเป็น domain ที่อนุญาต
-    header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, Authorization'); // เพิ่ม Authorization ที่นี่
-    exit(); // จบการทำงานหลังจากตั้งค่า header
-}
-
-// ตั้งค่า header สำหรับการทำ CORS ใน response
-header('Access-Control-Allow-Origin: *'); // หรือตั้งค่าเป็น domain ที่อนุญาต
-header('Content-Type: application/json; charset=utf-8');
-
-$database_hostname = 'localhost';
-$database_username = 'team'; 
-$database_password = 'Te@m1234!';
-$database_databasename = 'management';
-$connect_management = new mysqli($database_hostname, $database_username, $database_password, $database_databasename);
+include ('host.php');
 
 $response = [];
 
-if (!$connect_management) {
-    $response['error'] = 'Database Connect Failed: ' . mysqli_connect_error();
+if ($connect_management->connect_error) {
+    $response['error'] = 'การเชื่อมต่อฐานข้อมูลล้มเหลว : '.$connect_management->connect_error;
     echo json_encode($response);
+    exit;
 } else {
-    $response['message'] = 'Database Connected!';
-    
-    // ตรวจสอบประเภทของคำขอ (GET, POST)
-    $request_method = $_SERVER['REQUEST_METHOD'];
+    // ตรวจสอบว่ามีการส่งข้อมูลผ่าน POST หรือไม่
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        //$data = json_decode(file_get_contents('php://input'), true);
+        //$username = $data['username'];
 
-    if ($request_method === 'GET') {
-        // รับค่ารหัสสินค้าจาก URL
-        $id = $_GET['id'];
-
-        // คำสั่ง SQL เพื่อตรวจสอบว่ามีรหัสสินค้านี้ในฐานข้อมูลหรือไม่
-        $sql = "SELECT * FROM ms_accident WHERE id = ?";
-        $stmt = $connect_management->prepare($sql);
-        $stmt->bind_param('s', $id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $stmt->close();
-
-        if ($result->num_rows > 0) {
-            $row = $result->fetch_array();
-            $product = array(
-                'id' => $row['id'],
-                'datetime' => $row['datetime'],
-                'location_latitude' => $row['location_latitude'],
-                'location_longitude' => $row['location_longitude'],
-            );
-            // ส่งค่าในรูปแบบ JSON กลับไปยัง Dart application
-            echo json_encode($product);
-        } else {
-            // ถ้าไม่มีข้อมูล
-            $response['error'] = 'No product found';
-            echo json_encode($response);
+        // รับค่า Username จาก POST
+        $username = $_POST['username'];
+        if(empty($username))
+        {
+            $response['message'] = 'ไม่มีการส่งค่า Username โปรดลองใหม่อีกครั้ง';
         }
-    } elseif ($request_method === 'POST') {
-        // ดึงข้อมูลจากตัวแปร JSON ที่ส่งมา
-        $json_data = file_get_contents('php://input');
-        $data = json_decode($json_data, true);
-
-        // ตรวจสอบว่าข้อมูลถูกส่งมาในรูปแบบที่ถูกต้องหรือไม่
-        if (json_last_error() === JSON_ERROR_NONE) {
-            // ดึงข้อมูลจากตัวแปรที่ส่งมา
-            $id = $data['id'];
-            $datetime = $data['datetime'];
-            $location_latitude = $data['location_latitude'];
-            $location_longitude = $data['location_longitude'];
-
-            // ตรวจสอบว่ามี id ซ้ำหรือไม่
-            $check_sql = "SELECT * FROM ms_accident WHERE id = ?";
-            $check_stmt = $connect_management->prepare($check_sql);
-            $check_stmt->bind_param('s', $id);
-            $check_stmt->execute();
-            $check_result = $check_stmt->get_result();
-            $check_stmt->close();
-
-            if ($check_result->num_rows > 0) {
-                // ถ้ามี id ซ้ำ ให้ทำการอัปเดตข้อมูล
-                $update_sql = "UPDATE ms_accident SET datetime = ?, location_latitude = ?, location_longitude = ? WHERE id = ?";
-                $update_stmt = $connect_management->prepare($update_sql);
-                $update_stmt->bind_param('ssdd', $datetime, $location_latitude, $location_longitude, $id);
-
-                if ($update_stmt->execute()) {
-                    $response['success'] = true;
-                    $response['message'] = 'User updated successfully';
-                } else {
-                    $response['error'] = 'Error updating user: ' . $update_stmt->error;
-                }
-
-                $update_stmt->close();
-            } else {
-                // ถ้าไม่มี id ซ้ำ ให้ทำการเพิ่มข้อมูล
-                $insert_sql = "INSERT INTO ms_accident (id, datetime, location_latitude, location_longitude) VALUES (?, ?, ?, ?)";
-                $insert_stmt = $connect_management->prepare($insert_sql);
-                $insert_stmt->bind_param('ssdd', $id, $datetime, $location_latitude, $location_longitude);
-
-                if ($insert_stmt->execute()) {
-                    $response['success'] = true;
-                    $response['message'] = 'User added successfully';
-                } else {
-                    $response['error'] = 'Error adding user: ' . $insert_stmt->error;
-                }
-
-                $insert_stmt->close();
+        else
+        {
+            $sql_personal = "SELECT * FROM ms_personal WHERE telephone = ?";
+            $stmt_personal = $connect_management->prepare($sql_personal);
+            $stmt_personal->bind_param('s', $username);
+            $stmt_personal->execute();
+            $result_personal = $stmt_personal->get_result();
+            $row_personal = $result_personal->fetch_array();
+            $stmt_personal->close();    
+            
+            // Query เพื่อตรวจสอบว่ามีการแจ้งเหตุซ้ำหรือไม่
+            $sql_check = "SELECT * FROM ms_accident WHERE 
+            `create_by` = '".$row_personal['id']."' AND 
+            `status_accident` = '1'";
+            $query_check = $connect_management->query($sql_check);
+            $row_check = $query_check->fetch_array();
+            $query_check->close();
+            $sql_checkstatus = "SELECT * FROM tbl_status_accident WHERE 
+            `id` = '".$row_check['status_check']."'";
+            $query_checkstatus = $connect_management->query($sql_checkstatus);
+            $row_checkstatus = $query_checkstatus->fetch_array();
+            $total_checkstatus = $query_checkstatus->num_rows;
+            $query_checkstatus->close();
+            if($total_checkstatus >= '1')
+            {
+                $response['status'] = $row_check['status_accident'];
             }
-        } else {
-            $response['error'] = 'Invalid JSON format';
-        }
+            else
+            {
+                $response['status'] = 'N/A';
+            }
 
-        // ส่ง response กลับในรูปแบบ JSON
-        echo json_encode($response);
+            // รับค่า POST
+            $aoi = $_POST['aoi'] ?? '';
+            $subdistrict = $_POST['subdistrict'] ?? '';
+            $district = $_POST['district'] ?? '';
+            $province = $_POST['province'] ?? '';
+            $postcode = $_POST['postcode'] ?? '';
+            $country = $_POST['country'] ?? '';
+            $currentLocation_Latitude = $_POST['currentlocation_latitude'] ?? '';
+            $currentLocation_Longitude = $_POST['currentlocation_longitude'] ?? '';
+            $message = $_POST['message'] ?? ''; // เพิ่มการรับค่า message
+
+            // ตรวจสอบค่าว่าง 
+            if(empty($aoi) || 
+            empty($subdistrict) || 
+            empty($district) || 
+            empty($province) || 
+            empty($postcode) || 
+            empty($country) || 
+            empty($currentLocation_Latitude) || 
+            empty($currentLocation_Longitude) || 
+            empty($message)) // เพิ่มการตรวจสอบค่า message
+            {
+                $response['message'] = 'ข้อมูลตำแหน่งปัจจุบันไม่ครบ โปรดแจ้งเหตุใหม่อีกครั้ง';
+            } else {
+                if ($query_check->num_rows > 0) {
+                    // มีการแจ้งเหตุสำหรับผู้ใช้งานนี้แล้ว
+                    $response['message'] = 'คุณมีการแจ้งเหตุไปแล้ว โปรดรอเจ้าหน้าที่รับแจ้งเหตุ';
+                } else {
+                    // ไม่มีการแจ้งเหตุสำหรับผู้ใช้งานนี้
+                    $date = date('Y-m-d H:i:s');
+                    // ทำการเพิ่มข้อมูลในฐานข้อมูล
+                    $sql_insert = "INSERT INTO ms_accident SET 
+                    `date` = '".$date."', 
+                    `name` = '".$aoi."', 
+                    `address` = '".$subdistrict.' '.$district.' '.$province.' '.$postcode.' '.$country."', 
+                    `location_latitude` = '".$currentLocation_Latitude."', 
+                    `location_longitude` = '".$currentLocation_Longitude."',
+                    `create_by` = '".$row_personal['id']."',
+                    `status_accident` = '1',
+                    `message` = '".$message."'"; // เพิ่มการเก็บข้อมูล message ในฐานข้อมูล";
+                    if ($connect_management->query($sql_insert) === TRUE) {
+                        $response['message'] = "แจ้งอุบัติเรียบร้อย โปรดรอเจ้าหน้าที่รับแจ้งเหตุ";
+                    } else {
+                        $response['error'] = "ไม่สามารถแจ้งเหตุ โปรดลองใหม่อีกครั้ง";
+                    }
+                }
+            }
+        }
+    } else {
+        // ไม่ใช่คำขอ POST
+        $response['error'] = "รองรับเฉพาะคำขอแบบ POST เท่านั้น";
     }
 }
 
-// ปิดการเชื่อมต่อกับ MySQL
-$connect_management->close();
+
+// ส่งค่ากลับไปยัง Flutter ผ่าน JSON
+echo json_encode($response, JSON_UNESCAPED_UNICODE);
 ?>

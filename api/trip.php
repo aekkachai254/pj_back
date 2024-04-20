@@ -1,109 +1,66 @@
 <?php
-require_once './db_config.php';
+include ('host.php');
 
-// Initialize and handle CORS headers
-$corsHandler = new CorsHandler();
-$corsHandler->handle();
+$response = [];
 
-// Set response content type
-header('Content-Type: application/json; charset=utf-8');
-
-try {
-    // Create a database connection using PDO
-    $dbManager = new DatabaseManager(DB_HOSTNAME, DB_USERNAME, DB_PASSWORD, DB_DATABASE);
-
-    // Fetch trips data
-    $tripsData = $dbManager->fetchTripsData();
-
-    // Close the database connection
-    $dbManager->close();
-
-    // Send response
-    echo json_encode($tripsData);
-} catch (Exception $e) {
-    $errorResponse = ['error' => $e->getMessage()];
-    echo json_encode($errorResponse);
+if(!$connect_management)
+{
+    $response['error'] = 'Database is not connect.';
+    echo json_encode($response, JSON_UNESCAPED_UNICODE);
 }
-
-// Class to handle CORS headers
-class CorsHandler {
-    public function handle() {
-        if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
-            header('Access-Control-Allow-Origin: *'); // Set to specific domain if required
-            header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-            header('Access-Control-Allow-Headers: Content-Type, Authorization'); // Add Authorization if needed
-            exit;
+else
+{
+    $response['message'] = 'Database is connected.';
+    if($_SERVER['REQUEST_METHOD'] === 'GET')
+    {
+        $username = $_GET['username'];
+        $sql_personal = "SELECT * FROM ms_personal WHERE telephone = '".$username."'";
+        $query_personal = $connect_management->query($sql_personal);
+        $row_personal = $query_personal->fetch_array();
+        $total_personal = $query_personal->num_rows;
+        //$query_personal->clone();
+        if($total_personal >= 1)
+        {
+            $sql_trip = "SELECT * FROM ms_trip WHERE driver = '".$row_personal['id']."'";
+            $query_trip = $connect_management->query($sql_trip);
+            $total_trip = $query_trip->num_rows;
+            if($total_trip >= 1)
+            {
+                while($row_trip = $query_trip->fetch_array())
+                {
+                    $date = $row_trip['date'];
+                    //$date_time = substr($date,11,8);
+                    $date_y = substr($date,0,4)+543;
+                    $date_m = substr($date,5,2);
+                    $date_d = substr($date,8,2);				
+                    $date = $date_d."/".$date_m."/".$date_y;
+                    $trip_data[] = [
+                        'id' => $row_trip['id'],
+                        'name' => $row_trip['name'],
+                        'date' => $date,
+                        'status_trip' => $row_trip['status_trip'],
+                    ];
+                }
+                echo json_encode($trip_data, JSON_UNESCAPED_UNICODE);
+            }
+            else
+            {
+                $response['error'] = 'ไม่พบข้อมูลรายการเดินทาง';
+                echo json_encode($response, JSON_UNESCAPED_UNICODE);
+            }
         }
-        header('Access-Control-Allow-Origin: *'); // Set to specific domain if required
-    }
-}
-
-// Class for managing database operations
-class DatabaseManager {
-    private $connection;
-
-    public function __construct($hostname, $username, $password, $database) {
-        $this->connection = new PDO("mysql:host=$hostname;dbname=$database", $username, $password);
-        $this->connection->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        $this->connection->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-        //set http status code to 500 if connect fail
-        http_response_code(500);
-
-        if ($this->connection) {
-            http_response_code(200);
+        else
+        {
+            $response['error'] = 'ไม่พบผู้ใช้';
+            echo json_encode($response, JSON_UNESCAPED_UNICODE);
         }
-
     }
-
-    public function fetchTripsData() {
-        $tripsData = ['ms_trip' => []];
-
-        $sqlTrip = "SELECT * FROM ms_trip";
-        $stmtTrip = $this->connection->query($sqlTrip);
-
-        while ($rowTrip = $stmtTrip->fetch(PDO::FETCH_ASSOC)) {
-            $tripData = [
-                'id' => $rowTrip['id'],
-                'name' => $rowTrip['name'],
-                'date' => $rowTrip['date'],
-                'car' => $rowTrip['car'],
-                'create_by' => $rowTrip['create_by'],
-                'status_trip' => $rowTrip['status_trip'],
-            ];
-
-            $tripData['tr_trip_detail'] = $this->fetchTripDetails($rowTrip['id']);
-
-            $tripsData['ms_trip'][] = $tripData;
-        }
-
-        return $tripsData;
-    }
-
-    private function fetchTripDetails($tripId) {
-        $tripDetails = [];
-
-        $sqlDetail = "SELECT * FROM tr_trip_detail WHERE trip = :tripId";
-        $stmtDetail = $this->connection->prepare($sqlDetail);
-        $stmtDetail->bindParam(':tripId', $tripId);
-        $stmtDetail->execute();
-
-        while ($rowDetail = $stmtDetail->fetch(PDO::FETCH_ASSOC)) {
-            $tripDetail = [
-                'id' => $rowDetail['id'],
-                'purchaseorder' => $rowDetail['purchaseorder'],
-                'shop' => $rowDetail['shop'],
-                'trip' => $rowDetail['trip'],
-                'status_check' => $rowDetail['status_check'],
-            ];
-
-            $tripDetails[] = $tripDetail;
-        }
-
-        return $tripDetails;
-    }
-
-    public function close() {
-        $this->connection = null;
+    else
+    {
+        $response['error']  = 'วิธีการร้องขอ METHOD แบบ GET เท่านั้น';
+        echo json_encode($response, JSON_UNESCAPED_UNICODE);
     }
 }
+// ปิดการเชื่อมต่อกับ MySQL
+$connect_management->close();
 ?>

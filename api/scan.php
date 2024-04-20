@@ -1,89 +1,73 @@
 <?php
-require_once '../db_config.php';
+include ('host.php');
 
-header('Access-Control-Allow-Origin: *'); // Set to allowed domain in production
-header('Content-Type: application/json; charset=utf-8');
-
-try {
-    // Create a PDO connection using database configuration constants
-    $pdo = new PDO("mysql:host=" . DB_HOSTNAME . ";dbname=" . DB_DATABASE, DB_USERNAME, DB_PASSWORD);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-    // Handle preflight OPTIONS request
-    handlePreflightRequest();
-
-    // Handle API request
-    if ($_SERVER['REQUEST_METHOD'] == 'GET') {
-        handleGetRequest($pdo);
-    } else {
-        throw new Exception('Unsupported request method');
-    }
-} catch (Exception $e) {
-    $error = ['error' => $e->getMessage()];
-    echo json_encode($error);
+// ตรวจสอบว่ามีการเชื่อมต่อสำเร็จหรือไม่
+if ($connect_management->connect_error) {
+    die('Connection failed: ' . $connect_management->connect_error);
 }
 
-function handlePreflightRequest() {
-    if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
-        header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-        header('Access-Control-Allow-Headers: Content-Type, Authorization');
-        exit();
-    }
-}
+// ตั้งเวลาในเขตเวลา Asia/Bangkok
+date_default_timezone_set('Asia/Bangkok');
 
-function handleGetRequest($pdo) {
-    if (isset($_GET['product_id']) && isset($_GET['document_no'])) {
-        $product_id = $_GET['product_id'];
-        $document_no = $_GET['document_no'];
+$response = [];
 
-        checkProductAndPurchaseOrder($pdo, $product_id, $document_no);
-    } else {
-        throw new Exception('Missing parameters');
-    }
-}
+if (!$connect_management) {
+    $response['error'] = 'Database Connect Failed: ' . mysqli_connect_error();
+} else {
+    $response['message'] = 'Database Connected!';
 
-function checkProductAndPurchaseOrder($pdo, $product_id, $document_no) {
-    $product_row = getProductDetails($pdo, $product_id);
+    // รับค่ารหัสสินค้าจาก URL
+    $product_id = $_GET['product_id'];
+    $document_no = $_GET['document_no'];
 
-    if ($product_row) {
-        $purchase_order_row = getPurchaseOrderDetails($pdo, $document_no);
+    // คำสั่ง SQL เพื่อตรวจสอบว่ามีรหัสสินค้านี้ในฐานข้อมูลหรือไม่
+    $sql = "SELECT * FROM ms_product WHERE id = ?";
+    $stmt = $connect_management->prepare($sql);
+    $stmt->bind_param('s', $product_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_array();
+    $stmt->close();
 
-        if ($purchase_order_row) {
+    if ($result->num_rows > 0) {
+        // คำสั่ง SQL เพื่อตรวจสอบว่ามีรหัสสินค้านี้ในฐานข้อมูลหรือไม่
+        $sql_purchase_order = "SELECT * FROM tr_purchaseorder_detail WHERE document_no = ?";
+        $stmt_purchase_order = $connect_management->prepare($sql_purchase_order);
+        $stmt_purchase_order->bind_param('s', $document_no);
+        $stmt_purchase_order->execute();
+        $result_purchase_order = $stmt_purchase_order->get_result();
+        $stmt_purchase_order->close();
+
+        if ($result_purchase_order->num_rows == 1) {
             echo json_encode(['message' => 'รหัสสินค้านี้ถูกสแกนไปแล้ว']);
         } else {
-            updatePurchaseOrderStatus($pdo, $document_no, $product_id);
+            $update = "UPDATE tr_purchaseorder_detail SET 
+                status_check = '1'
+                WHERE document_no = ? AND product = ?";
 
-            $purchaseOrderDetail = [
-                'id' => $product_row['id'],
+            // สร้าง statement
+            $stmt_update = $connect_management->prepare($update);
+            // Bind parameters
+            $stmt_update->bind_param('ss', $document_no, $product_id);
+            // Execute statement
+            $stmt_update->execute();
+
+            $purchaseOrderDetail = array(
+                'id' => $row['id'],
                 'document_no' => $document_no,
                 'product' => $product_id,
                 'status_check' => '1',
-            ];
-
-            echo json_encode(['message' => 'ตรวจสอบรายการสินค้าสำเร็จ', 'data' => $purchaseOrderDetail]);
+            );
+            echo json_encode(['message' => 'ตรวจสอบรายการสินค้าสำเร็จ']);
+            // ส่งค่าในรูปแบบ JSON กลับไปยัง Dart application
+            echo json_encode($purchaseOrderDetail);
         }
     } else {
+        // ถ้าไม่มีข้อมูล
         echo json_encode(['message' => 'ไม่พบรหัสสินค้านี้']);
     }
-}
 
-function getProductDetails($pdo, $product_id) {
-    $sql_product = "SELECT * FROM ms_product WHERE id = ?";
-    $stmt_product = $pdo->prepare($sql_product);
-    $stmt_product->execute([$product_id]);
-    return $stmt_product->fetch(PDO::FETCH_ASSOC);
-}
-
-function getPurchaseOrderDetails($pdo, $document_no) {
-    $sql_purchase_order = "SELECT * FROM tr_purchaseorder_detail WHERE document_no = ?";
-    $stmt_purchase_order = $pdo->prepare($sql_purchase_order);
-    $stmt_purchase_order->execute([$document_no]);
-    return $stmt_purchase_order->fetch(PDO::FETCH_ASSOC);
-}
-
-function updatePurchaseOrderStatus($pdo, $document_no, $product_id) {
-    $update_sql = "UPDATE tr_purchaseorder_detail SET status_check = '1' WHERE document_no = ? AND product = ?";
-    $stmt_update = $pdo->prepare($update_sql);
-    $stmt_update->execute([$document_no, $product_id]);
+    // ปิดการเชื่อมต่อกับ MySQL
+    $connect_management->close();
 }
 ?>

@@ -1,73 +1,102 @@
 <?php
-// ตรวจสอบว่า request เป็นแบบ OPTIONS หรือไม่ (สำหรับการทำ CORS preflight)
-if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
-    // ตั้งค่า header สำหรับการทำ CORS preflight
-    header('Access-Control-Allow-Origin: *'); // หรือตั้งค่าเป็น domain ที่อนุญาต
-    header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, Authorization'); // เพิ่ม Authorization ที่นี่
-    exit(); // จบการทำงานหลังจากตั้งค่า header
-}
+include('host.php');
 
-// ตั้งค่า header สำหรับการทำ CORS ใน response
-header('Access-Control-Allow-Origin: *'); // หรือตั้งค่าเป็น domain ที่อนุญาต
-header('Content-Type: application/json; charset=utf-8');
+$response = array();
 
-$database_hostname = 'localhost';
-$database_username = 'team'; 
-$database_password = 'Te@m1234!';
-$database_databasename = 'management';
-$connect_management = new mysqli($database_hostname, $database_username, $database_password, $database_databasename);
-
-if(!$connect_management) {
-    $response['error'] = 'การเชื่อมต่อฐานข้อมูลล้มเหลว: ' . mysqli_connect_error();
-    echo json_encode($response);
+if (!$connect_management) {
+    $response['database_message'] = 'ไม่สามารถเชื่อมต่อฐานข้อมูลได้';
+    echo json_encode($response, JSON_UNESCAPED_UNICODE);
 } else {
-    // รับค่ารหัสสินค้าจาก URL
-    $id = isset($_GET['id']) ? $_GET['id'] : null;
+    $response['database_message'] = 'เชื่อมต่อฐานข้อมูลเรียบร้อยแล้ว';
+    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+        $purchaseorder_id = isset($_GET['purchaseorder_id']) ? $_GET['purchaseorder_id'] : '';
+        $username = isset($_GET['username']) ? $_GET['username'] : '';
 
-    // ตรวจสอบว่า $id ไม่ว่างเปล่าก่อนดำเนินการต่อกับคิวรีฐานข้อมูล
-    if (empty($id)) {
-        $response['error'] = 'พารามิเตอร์ ID หายไป';
-        echo json_encode($response);
-        exit();
-    }
+        if (empty($purchaseorder_id)) {
+            $response['error'] = 'รหัสใบสั่งซื้อไม่ถูกต้อง';
+            echo json_encode($response, JSON_UNESCAPED_UNICODE);
+            exit();
+        } else {
+            $sql_purchaseorder = "SELECT * FROM ms_purchaseorder WHERE id = ?";
+            $stmt_purchaseorder = $connect_management->prepare($sql_purchaseorder);
+            if (!$stmt_purchaseorder) {
+                $response['error'] = 'เกิดข้อผิดพลาดในการเตรียมคำสั่ง';
+                echo json_encode($response, JSON_UNESCAPED_UNICODE);
+                $connect_management->close();
+                exit();
+            }
+            $stmt_purchaseorder->bind_param('s', $purchaseorder_id);
+            $stmt_purchaseorder->execute();
+            $result_purchaseorder = $stmt_purchaseorder->get_result();
+            $row_purchaseorder = $result_purchaseorder->fetch_array();
+            $stmt_purchaseorder->close();
 
-    // คำสั่ง SQL เพื่อตรวจสอบว่ามีรหัสสินค้านี้ในฐานข้อมูลหรือไม่
-    $sql = "SELECT * FROM ms_purchaseorder WHERE id = ?";
-    $stmt = $connect_management->prepare($sql);
-    $stmt->bind_param('s', $id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $stmt->close();   
+            if ($row_purchaseorder) {
+                $response['purchaseorder'] = array(
+                    'document_no' => $row_purchaseorder['document_no']
+                );
 
-    // ดึงข้อมูลจากผลลัพธ์
-    $row = $result->fetch_assoc();
+                $sql_purchaseorder_detail = "SELECT * FROM tr_purchaseorder_detail WHERE document_no = ?";
+                $stmt_purchaseorder_detail = $connect_management->prepare($sql_purchaseorder_detail);
+                if (!$stmt_purchaseorder_detail) {
+                    $response['error'] = 'เกิดข้อผิดพลาดในการเตรียมคำสั่ง';
+                    echo json_encode($response, JSON_UNESCAPED_UNICODE);
+                    $connect_management->close();
+                    exit();
+                }
+                $stmt_purchaseorder_detail->bind_param('s', $row_purchaseorder['document_no']);
+                $stmt_purchaseorder_detail->execute();
+                $result_purchaseorder_detail = $stmt_purchaseorder_detail->get_result();
 
-    if ($row) {
-        // แปลงข้อมูลในรูปแบบของ Array
-        $Purchaseorder = array(
-            'id' => $row['id'],
-            'document_no' => $row['document_no'],
-            'shop' => $row['shop'],
-            'date' => $row['date'],
-            'amount_date' => $row['amount_date'],
-            'payment_terms' => $row['payment_terms'],
-            'price_total' => $row['price_total'],   
-            'price_discount' => $row['price_discount'],         
-            'cost_total' => $row['cost_total'],
-            'cost_text' => $row['cost_text'],
-            'status_purchaseorder' => $row['status_purchaseorder'],
-        );
-
-        // ส่งค่าในรูปแบบ JSON กลับไปยัง Dart application
-        echo json_encode($Purchaseorder);
+                $products = array();
+                while ($row_purchaseorder_detail = $result_purchaseorder_detail->fetch_array()) {
+                    $sql_product = "SELECT * FROM ms_product WHERE id = ?";
+                    $stmt_product = $connect_management->prepare($sql_product);
+                    if (!$stmt_product) {
+                        $response['error'] = 'เกิดข้อผิดพลาดในการเตรียมคำสั่ง';
+                        echo json_encode($response, JSON_UNESCAPED_UNICODE);
+                        $connect_management->close();
+                        exit();
+                    }
+                    $stmt_product->bind_param('s', $row_purchaseorder_detail['product']);
+                    $stmt_product->execute();
+                    $result_product = $stmt_product->get_result();
+                    $row_product = $result_product->fetch_array();
+                    $stmt_product->close();
+                    if(empty($row_product['picture_1']))
+                    {
+                        $picture_1 = $api_website_image.'/product.png';
+                    }
+                    else
+                    {
+                        $picture_1 = $api_website_image.'/product/'.$row_product['picture_1'];
+                    }
+                    $status_check = $row_purchaseorder_detail['status_check'] ? $api_website_image . '/success.png' : '';
+                    $product = array(
+                        'id' => $row_product['id'],
+                        'picture_1' => $picture_1,
+                        'name' => $row_product['name'],
+                        'size' => $row_product['size'],
+                        'package' => $row_product['package'],
+                        'shelf'  => $row_product['shelf'],
+                        'product_amount' => $row_purchaseorder_detail['product_amount'],
+                        'product_amount_check' => $row_purchaseorder_detail['product_amount_check'],
+                        'status_check' => $status_check,
+                    );  
+                    $products[] = $product;
+                }
+                $response['products'] = $products;
+                echo json_encode($response, JSON_UNESCAPED_UNICODE);
+            } else {
+                $response['error'] = 'ไม่พบใบสั่งซื้อ';
+                echo json_encode($response, JSON_UNESCAPED_UNICODE);
+            }
+        }
     } else {
-        // ถ้าไม่มีข้อมูล
-        $response['error'] = 'ไม่พบข้อมูล';
-        echo json_encode($response);
+        $response['error'] = 'รูปแบบการร้องขอต้องเป็น GET เท่านั้น';
+        echo json_encode($response, JSON_UNESCAPED_UNICODE);
     }
-
-    // ปิดการเชื่อมต่อกับ MySQL
-    $connect_management->close();
 }
+
+$connect_management->close();
 ?>
